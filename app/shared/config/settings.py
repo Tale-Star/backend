@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/talestar.db"
     assets_directory: Path = Path("./data/assets")
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
-    sqlite_busy_timeout_ms: int = 5000
+    sqlite_busy_timeout_ms: int = Field(default=5000, gt=0)
 
 
 @lru_cache
