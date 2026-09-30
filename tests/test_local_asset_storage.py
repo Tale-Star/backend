@@ -26,3 +26,16 @@ def test_local_storage_rejects_path_extensions(tmp_path) -> None:
 
     with pytest.raises(ValueError):
         storage.save(uuid4(), "../secret", b"content")
+
+
+def test_local_storage_scopes_assets_to_the_owner(tmp_path) -> None:
+    storage = LocalAssetStorage(tmp_path / "media")
+    asset_id = uuid4()
+    owner_id = uuid4()
+    other_owner_id = uuid4()
+    key = storage.save(asset_id, ".png", b"owned image", owner_id)
+
+    assert key.startswith(f"{owner_id.hex}/")
+    assert storage.resolve_key(key, owner_id).is_file()
+    with pytest.raises(ValueError):
+        storage.resolve_key(key, other_owner_id)

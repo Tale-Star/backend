@@ -7,7 +7,10 @@ from sqlalchemy.engine import Engine as SqlAlchemyEngine
 
 from app.shared.config.settings import get_settings
 from app.shared.database.base import Base
+from app.shared.database.model_registry import register_models
 from app.shared.database.session import create_database_engine
+
+register_models()
 
 config = context.config
 settings = get_settings()

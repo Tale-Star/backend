@@ -15,6 +15,33 @@ def test_health_routes(test_settings: Settings) -> None:
         assert client.get("/api/v1/health").json() == {"status": "ok"}
 
 
+def test_local_smoke_test_page_is_served_from_the_api(test_settings: Settings) -> None:
+    application = create_app(test_settings)
+
+    with TestClient(application) as client:
+        response = client.get("/smoke-test")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Generate Test Music" in response.text
+    assert "Generate Test Image" in response.text
+
+
+def test_openapi_lists_frontend_routes_and_consistent_responses(test_settings: Settings) -> None:
+    application = create_app(test_settings)
+
+    with TestClient(application) as client:
+        schema = client.get("/openapi.json").json()
+
+    assert "creative-authoring" in {tag["name"] for tag in schema["tags"]}
+    assert "/api/v1/library" in schema["paths"]
+    responses = schema["paths"]["/api/v1/generations/images"]["post"]["responses"]
+    assert "202" in responses
+    assert responses["401"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "ErrorResponse"
+    )
+
+
 def test_cors_uses_configured_origins(test_settings: Settings) -> None:
     application = create_app(test_settings)
 

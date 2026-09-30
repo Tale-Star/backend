@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tale Star local generation smoke test</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        color: #1d2433;
+        background: #f3f5f8;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; }
+      header { padding: 1rem 1.5rem; background: #17243a; color: white; }
+      header h1 { margin: 0 0 .25rem; font-size: 1.2rem; }
+      header p { margin: 0; color: #cbd5e1; font-size: .9rem; }
+      main { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 78px); }
+      section { padding: 1.5rem; min-width: 0; }
+      section + section { border-left: 1px solid #d8dee8; }
+      h2 { margin-top: 0; }
+      button { border: 0; border-radius: .4rem; padding: .7rem 1rem; color: white; background: #3155a5; font: inherit; cursor: pointer; }
+      button:disabled { opacity: .55; cursor: wait; }
+      .status { min-height: 1.5rem; margin: 1rem 0 .5rem; font-weight: 600; }
+      .metadata { color: #4c5668; font-size: .9rem; white-space: pre-wrap; }
+      .result { display: block; max-width: 100%; max-height: 65vh; margin-top: 1rem; }
+      audio.result { width: 100%; }
+      .error { color: #a12626; }
+      #auth-status { padding: .7rem 1.5rem; background: #e6ebf3; font-size: .9rem; }
+
+      @media (max-width: 700px) {
+        main { grid-template-columns: 1fr; }
+        section + section { border-left: 0; border-top: 1px solid #d8dee8; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Tale Star — local generation smoke test</h1>
+      <p>Fixed requests through the local API and worker. The worker's configured adapters are used.</p>
+    </header>
+    <div id="auth-status" role="status" aria-live="polite">Connecting to the local backend…</div>
+    <main>
+      <section aria-labelledby="music-title">
+        <h2 id="music-title">Music</h2>
+        <p>Short English hip hop song about sailing.</p>
+        <button id="music-button" type="button" disabled>Generate Test Music</button>
+        <div id="music-status" class="status" role="status" aria-live="polite">Waiting for API authentication.</div>
+        <div id="music-metadata" class="metadata"></div>
+        <audio id="music-result" class="result" controls hidden></audio>
+      </section>
+      <section aria-labelledby="image-title">
+        <h2 id="image-title">Image</h2>
+        <p>Cartoon cat sailing a small boat.</p>
+        <button id="image-button" type="button" disabled>Generate Test Image</button>
+        <div id="image-status" class="status" role="status" aria-live="polite">Waiting for API authentication.</div>
+        <div id="image-metadata" class="metadata"></div>
+        <img id="image-result" class="result" alt="Generated Tale Star test image" hidden />
+      </section>
+    </main>
+
+    <script>
+      const smokeCredentials = {
+        email: "talestar.smoke@example.com",
+        password: "TaleStar-smoke-test-only-2026!"
+      };
+      const autoRun = new URLSearchParams(window.location.search).get("run");
+      let accessToken = null;
+      const objectUrls = { music: null, image: null };
+
+      const testRequests = {
+        music: {
+          Caption: "A short, upbeat hip hop adventure about sailing across the sea",
+          Duration: 12,
+          Bpm: 92,
+          Voice: "Male · Warm",
+          Language: "English",
+          Output: "song",
+          Genre: ["Hip Hop"],
+          Mood: ["Adventurous", "Hopeful"],
+          Instruments: ["drum machine", "bass", "piano"],
+          Production: ["clean modern production"],
+          Sections: [
+            { Type: "Intro", Modifier: "upbeat", Text: "Set sail!" },
+            { Type: "Verse", Modifier: "rhythmic", Text: "Waves roll by, the wind is bright. We chase the stars into the night." },
+            { Type: "Chorus", Modifier: "energetic", Text: "Sail on, sail on, across the blue. The wide sea waits for me and you." }
+          ],
+          Seed: 24092
+        },
+        image: {
+          Action: "sailing across the ocean",
+          Emotion: "curious and joyful",
+          Scene: "a small wooden sailboat on a bright blue sea",
+          Moment: "sunny afternoon",
+          Extra: "clear horizon, gentle waves, child-friendly adventure",
+          FreePrompt: "A friendly orange cat at the helm of a small sailboat, crisp outlines and bright colors",
+          Style: "cartoon",
+          Characters: ["an adventurous orange cat"],
+          Objects: ["sailboat", "map", "life ring"],
+          Seed: 24093
+        }
+      };
+
+      function delay(milliseconds) {
+        return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+      }
+
+      async function responseJson(response) {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = body?.error?.message ?? body?.detail ?? `HTTP ${response.status}`;
+          throw new Error(typeof message === "string" ? message : JSON.stringify(message));
+        }
+        return body;
+      }
+
+      async function authenticate() {
+        const login = await fetch("/api/v1/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(smokeCredentials)
+        });
+        const result = await responseJson(login);
+        return result.access_token;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          ...options,
+          headers: {
+            ...(options.headers ?? {}),
+            Authorization: `Bearer ${accessToken}`
+          }
+        });
+        return responseJson(response);
+      }
+
+      function setStatus(kind, message, isError = false) {
+        const element = document.getElementById(`${kind}-status`);
+        element.textContent = message;
+        element.classList.toggle("error", isError);
+      }
+
+      function setMetadata(kind, lines) {
+        document.getElementById(`${kind}-metadata`).textContent = lines.join("\n");
+      }
+
+      async function showAsset(kind, assetId) {
+        const response = await fetch(`/api/v1/media/assets/${encodeURIComponent(assetId)}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!response.ok) {
+          await responseJson(response);
+          return;
+        }
+        if (objectUrls[kind]) URL.revokeObjectURL(objectUrls[kind]);
+        objectUrls[kind] = URL.createObjectURL(await response.blob());
+        const element = document.getElementById(`${kind}-result`);
+        element.src = objectUrls[kind];
+        element.hidden = false;
+      }
+
+      async function generate(kind) {
+        const button = document.getElementById(`${kind}-button`);
+        const endpoint = kind === "music" ? "/api/v1/generations/music" : "/api/v1/generations/images";
+        button.disabled = true;
+        document.getElementById(`${kind}-result`).hidden = true;
+        setMetadata(kind, []);
+        setStatus(kind, "Creating generation job…");
+
+        try {
+          const job = await api(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(testRequests[kind])
+          });
+          const deadline = Date.now() + 20 * 60 * 1000;
+          setStatus(kind, `Job ${job.id}: ${job.status}`);
+
+          while (Date.now() < deadline) {
+            await delay(1200);
+            const current = await api(`/api/v1/generations/${encodeURIComponent(job.id)}`);
+            setStatus(kind, `Job ${current.id}: ${current.status} (attempt ${current.attempts})`);
+
+            if (current.status === "Failed") {
+              throw new Error(current.error_message || "Generation failed without an error message.");
+            }
+            if (current.status === "Succeeded") {
+              const result = current.result;
+              await showAsset(kind, result.asset_id);
+              if (kind === "music") {
+                setMetadata(kind, [
+                  `Seed: ${result.seed ?? current.seed ?? "—"}`,
+                  `Duration: ${result.duration ?? "—"} s · BPM: ${result.bpm ?? "—"}`,
+                  `Language: ${result.language ?? "—"} · MIME: ${result.media_type ?? "—"}`
+                ]);
+              } else {
+                setMetadata(kind, [
+                  `Seed: ${result.seed ?? current.seed ?? "—"}`,
+                  `Size: ${result.width ?? "—"} × ${result.height ?? "—"} · MIME: ${result.media_type ?? "—"}`
+                ]);
+              }
+              setStatus(kind, "Succeeded — asset loaded from the backend.");
+              return;
+            }
+          }
+          throw new Error("Timed out waiting for the worker. Check that python -m worker is running.");
+        } catch (error) {
+          setStatus(kind, error.message || String(error), true);
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      document.getElementById("music-button").addEventListener("click", () => generate("music"));
+      document.getElementById("image-button").addEventListener("click", () => generate("image"));
+
+      authenticate()
+        .then((token) => {
+          accessToken = token;
+          document.getElementById("auth-status").textContent = `Authenticated with ${window.location.origin}; requests use the local API and configured worker adapters.`;
+          document.getElementById("music-button").disabled = false;
+          document.getElementById("image-button").disabled = false;
+          setStatus("music", "Ready.");
+          setStatus("image", "Ready.");
+          if (autoRun === "music" || autoRun === "both") {
+            document.getElementById("music-button").click();
+          }
+          if (autoRun === "image" || autoRun === "both") {
+            document.getElementById("image-button").click();
+          }
+        })
+        .catch((error) => {
+          document.getElementById("auth-status").textContent = `Backend authentication failed: ${error.message || error}`;
+          document.getElementById("auth-status").classList.add("error");
+          setStatus("music", "Not authenticated.", true);
+          setStatus("image", "Not authenticated.", true);
+        });
+    </script>
+  </body>
+</html>

@@ -4,7 +4,19 @@
 - El dominio permanece Python puro: sin FastAPI, SQLAlchemy ni librerías de IA.
 - Cambiar el esquema solo con Alembic; SQLite local debe conservar WAL.
 - Usar UUID en identificadores de dominio y no introducir Event Sourcing.
+- Reclamar jobs con un UPDATE atómico condicionado por Pending para impedir dobles ejecuciones.
+- Mantener los modelos detrás de adapters de infraestructura; usar la API oficial vigente de Diffusers y ACE-Step.
+- No cargar simultáneamente Z-Image y ACE-Step; compartir GPU_QUEUE_LOCK_PATH entre workers y liberar el runtime al cambiar de tipo.
+- Mantener los tests normales en fake mode y exigir activación explícita para integración local con modelos.
 - Leer configuración desde settings y `.env`; nunca versionar secretos.
+- Mantener pesos y cachés fuera del repositorio; no descargar modelos grandes durante tests.
 - Usar `APP_DEBUG` en vez de `DEBUG` para evitar colisiones con variables globales.
-- No añadir colas, Redis ni autenticación completa hasta que exista un caso de uso.
+- No anadir Redis, Celery ni microservicios para el MVP local.
+- Auth MVP: una cuenta adulta, JWT, Argon2 y PIN hasheado; sin roles, OAuth ni refresh rotation.
+- Filtrar jobs, contenido y biblioteca por owner en cada consulta; IDs conocidos no autorizan acceso.
+- Guardar assets bajo el UUID del owner y validar ruta, raiz y enlaces simbolicos al servirlos.
+- Preferir rutas de media por AssetId; mantener la resolucion de filesystem dentro de infraestructura.
+- Importar todos los modelos de infraestructura en Alembic para que detecte el esquema completo.
+- Guardar referencias de biblioteca solo despues de validar owner y tipo del recurso.
+- El texto de stories lo escribe el usuario; AR pertenece a Flutter/on-device.
 - Mantener módulos y archivos en `snake_case`, clases en `PascalCase`.

@@ -7,9 +7,31 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
+
+
+class ValidationIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    loc: list[str | int]
+    type: str
+    msg: str
+
+
+class ErrorBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str | list[ValidationIssue]
+
+
+class ErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    error: ErrorBody
 
 
 class AppError(Exception):
@@ -40,11 +62,18 @@ def install_exception_handlers(application: FastAPI) -> None:
     async def handle_validation_error(
         _request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        return _error_response(422, "validation_error", error.errors())
+        safe_errors = [
+            {key: item[key] for key in ("loc", "type", "msg") if key in item}
+            for item in error.errors()
+        ]
+        return _error_response(422, "validation_error", safe_errors)
 
     @application.exception_handler(StarletteHTTPException)
     async def handle_http_error(_request: Request, error: StarletteHTTPException) -> JSONResponse:
-        return _error_response(error.status_code, f"http_{error.status_code}", error.detail)
+        response = _error_response(error.status_code, f"http_{error.status_code}", error.detail)
+        if error.headers:
+            response.headers.update(error.headers)
+        return response
 
     @application.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
