@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.api.health import versioned_router as versioned_health_router
+from app.generative_media.infrastructure.local_asset_storage import LocalAssetStorage
 from app.shared.config.settings import Settings, get_settings
 from app.shared.database.session import create_database_engine, create_session_factory
 from app.shared.errors import install_exception_handlers
@@ -39,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.settings = app_settings
     application.state.engine = engine
     application.state.session_factory = session_factory
+    application.state.asset_storage = LocalAssetStorage(app_settings.assets_directory)
 
     if app_settings.cors_origins:
         application.add_middleware(
