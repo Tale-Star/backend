@@ -16,4 +16,3 @@ def health() -> dict[str, str]:
 def versioned_health() -> dict[str, str]:
     """Confirma la disponibilidad de la API versionada."""
     return {"status": "ok"}
-

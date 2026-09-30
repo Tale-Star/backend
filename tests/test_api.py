@@ -44,4 +44,3 @@ def test_application_errors_have_a_stable_response(test_settings: Settings) -> N
     assert response.json() == {
         "error": {"code": "invalid_operation", "message": "Invalid operation"}
     }
-

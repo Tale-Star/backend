@@ -26,4 +26,3 @@ def test_local_storage_rejects_path_extensions(tmp_path) -> None:
 
     with pytest.raises(ValueError):
         storage.save(uuid4(), "../secret", b"content")
-

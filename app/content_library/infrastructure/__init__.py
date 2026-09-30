@@ -1,2 +1,1 @@
 """Adaptadores técnicos de ContentLibrary."""
-

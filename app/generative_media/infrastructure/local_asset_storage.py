@@ -36,4 +36,3 @@ class LocalAssetStorage:
             raise ValueError("La extensión del asset debe ser una extensión simple, como '.png'.")
         identifier = asset_id.hex
         return self.root / identifier[:2] / f"{identifier}{normalized_extension}"
-

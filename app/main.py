@@ -34,7 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application = FastAPI(
         title=app_settings.app_name,
         version="0.1.0",
-        debug=app_settings.debug,
+        debug=app_settings.app_debug,
         lifespan=lifespan,
     )
     application.state.settings = app_settings
@@ -59,4 +59,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
-
