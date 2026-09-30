@@ -24,9 +24,7 @@ def create_database_engine(settings: Settings) -> Engine:
             "timeout": settings.sqlite_busy_timeout_ms / 1000,
         }
         database = url.database
-        is_memory_database = (
-            database in (None, "", ":memory:") or url.query.get("mode") == "memory"
-        )
+        is_memory_database = database in (None, "", ":memory:") or url.query.get("mode") == "memory"
         if database and not is_memory_database and not database.startswith("file:"):
             Path(database).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
@@ -57,4 +55,3 @@ def get_db_session(request: Request) -> Generator[Session, None, None]:
     factory: sessionmaker[Session] = request.app.state.session_factory
     with factory() as session:
         yield session
-

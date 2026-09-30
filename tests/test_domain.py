@@ -22,4 +22,3 @@ def test_entity_ids_are_uuids_and_identity_is_type_scoped() -> None:
     assert entity == same_identity
     assert hash(entity) == hash(same_identity)
     assert entity != other_type
-

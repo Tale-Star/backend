@@ -5,6 +5,6 @@
 - Cambiar el esquema solo con Alembic; SQLite local debe conservar WAL.
 - Usar UUID en identificadores de dominio y no introducir Event Sourcing.
 - Leer configuración desde settings y `.env`; nunca versionar secretos.
+- Usar `APP_DEBUG` en vez de `DEBUG` para evitar colisiones con variables globales.
 - No añadir colas, Redis ni autenticación completa hasta que exista un caso de uso.
 - Mantener módulos y archivos en `snake_case`, clases en `PascalCase`.
-

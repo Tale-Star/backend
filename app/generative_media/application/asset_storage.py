@@ -18,4 +18,3 @@ class AssetStorage(Protocol):
     def delete(self, asset_id: UUID, extension: str) -> None:
         """Elimina un asset si existe."""
         ...
-

@@ -3,11 +3,11 @@
 import logging
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from fastapi.encoders import jsonable_encoder
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +43,15 @@ def install_exception_handlers(application: FastAPI) -> None:
         return _error_response(422, "validation_error", error.errors())
 
     @application.exception_handler(StarletteHTTPException)
-    async def handle_http_error(
-        _request: Request, error: HTTPException
-    ) -> JSONResponse:
+    async def handle_http_error(_request: Request, error: StarletteHTTPException) -> JSONResponse:
         return _error_response(error.status_code, f"http_{error.status_code}", error.detail)
 
     @application.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
-        logger.exception("Error no controlado en %s %s", request.method, request.url.path, exc_info=error)
+        logger.error(
+            "Error no controlado en %s %s",
+            request.method,
+            request.url.path,
+            exc_info=(type(error), error, error.__traceback__),
+        )
         return _error_response(500, "internal_error", "Internal server error")
-

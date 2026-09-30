@@ -16,4 +16,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Revierte la revisión base, que todavía no crea tablas propias."""
     return None
-

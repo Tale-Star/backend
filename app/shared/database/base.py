@@ -16,4 +16,3 @@ class Base(DeclarativeBase):
     """Base de mapeo; los modelos SQLAlchemy viven en infrastructure."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
-

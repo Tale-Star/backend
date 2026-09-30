@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Tale Star API"
     app_env: Literal["local", "test", "production"] = "local"
-    debug: bool = False
+    app_debug: bool = False
     log_level: Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"] = "INFO"
     database_url: str = "sqlite:///./data/talestar.db"
     assets_directory: Path = Path("./data/assets")
@@ -32,4 +32,3 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Devuelve settings cacheados para el proceso actual."""
     return Settings()
-

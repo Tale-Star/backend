@@ -3,10 +3,7 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
-from sqlalchemy.engine import Connection
 from sqlalchemy.engine import Engine as SqlAlchemyEngine
-from sqlalchemy import engine_from_config
 
 from app.shared.config.settings import get_settings
 from app.shared.database.base import Base
@@ -41,7 +38,6 @@ def run_migrations_online() -> None:
     connectable: SqlAlchemyEngine = create_database_engine(settings)
     try:
         with connectable.connect() as connection:
-            connection = connection.execution_options(isolation_level="AUTOCOMMIT")
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
@@ -58,4 +54,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

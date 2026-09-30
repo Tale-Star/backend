@@ -24,4 +24,3 @@ def test_session_factory_creates_sessions(test_settings: Settings) -> None:
             assert session.execute(text("SELECT 1")).scalar_one() == 1
     finally:
         engine.dispose()
-

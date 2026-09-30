@@ -16,4 +16,3 @@ def test_settings(tmp_path: Path) -> Settings:
         assets_directory=tmp_path / "assets",
         cors_origins=["http://localhost:5173"],
     )
-
