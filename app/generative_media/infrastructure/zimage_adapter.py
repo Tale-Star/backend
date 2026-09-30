@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 import secrets
 from importlib import import_module
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from app.generative_media.application.generation_ports import GeneratedMedia
@@ -15,6 +17,8 @@ from app.generative_media.infrastructure.style_profiles import (
     StyleProfileRegistry,
 )
 from app.shared.config.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class ZImageAdapter:
@@ -39,6 +43,7 @@ class ZImageAdapter:
     def load(self) -> None:
         if self._pipeline is not None:
             return
+        load_started = perf_counter()
         self._settings.model_cache_directory.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("HF_HOME", str(self._settings.model_cache_directory.resolve()))
         try:
@@ -57,7 +62,7 @@ class ZImageAdapter:
 
         pipeline = pipeline_type.from_pretrained(
             self._settings.zimage_model_path,
-            dtype=dtype,
+            torch_dtype=dtype,
             cache_dir=str(self._settings.model_cache_directory.resolve()),
             local_files_only=not self._settings.model_downloads_enabled,
         )
@@ -68,6 +73,13 @@ class ZImageAdapter:
         self._pipeline = pipeline
         self._torch = torch
         self._device = device
+        logger.info(
+            "Loaded Z-Image-Turbo device=%s dtype=%s cpu_offload=%s load_seconds=%.2f",
+            device,
+            dtype,
+            device == "cuda" and self._settings.zimage_cpu_offload,
+            perf_counter() - load_started,
+        )
 
     def unload(self) -> None:
         if self._pipeline is not None and self._loaded_lora_path is not None:
@@ -89,6 +101,12 @@ class ZImageAdapter:
         prompt = build_zimage_prompt(payload, profile)
         effective_seed = seed if seed is not None else secrets.randbelow(4_294_967_296)
         generator = self._torch.Generator(device=self._device).manual_seed(effective_seed)
+        cuda = getattr(self._torch, "cuda", None)
+        cuda_available = self._device == "cuda" and bool(cuda is not None and cuda.is_available())
+        if cuda_available and cuda is not None:
+            cuda.synchronize()
+            cuda.reset_peak_memory_stats()
+        generation_started = perf_counter()
         output = self._pipeline(
             prompt=prompt,
             width=self._settings.zimage_width,
@@ -97,7 +115,25 @@ class ZImageAdapter:
             guidance_scale=0.0,
             generator=generator,
         )
+        if cuda_available and cuda is not None:
+            cuda.synchronize()
+        elapsed_seconds = perf_counter() - generation_started
         image = output.images[0]
+        peak_memory_mib = (
+            round(cuda.max_memory_reserved() / (1024 * 1024))
+            if cuda_available and cuda is not None
+            else None
+        )
+        logger.info(
+            "Z-Image-Turbo generation device=%s dtype=%s dimensions=%sx%s seconds=%.2f "
+            "cuda_peak_reserved_mib=%s",
+            self._device,
+            getattr(self._pipeline, "dtype", "configured"),
+            image.width,
+            image.height,
+            elapsed_seconds,
+            peak_memory_mib,
+        )
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return GeneratedMedia(

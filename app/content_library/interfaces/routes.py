@@ -20,7 +20,7 @@ from app.shared.errors import ErrorResponse
 
 router = APIRouter(
     prefix="/library",
-    tags=["content-library"],
+    tags=["Content Library"],
     responses={
         401: {"model": ErrorResponse, "description": "Authentication required."},
         422: {"model": ErrorResponse, "description": "Request validation failed."},

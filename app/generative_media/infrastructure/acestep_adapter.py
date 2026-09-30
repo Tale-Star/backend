@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
+import sys
 import tempfile
 from importlib import import_module
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from app.generative_media.application.generation_ports import GeneratedMedia
 from app.shared.config.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class AceStepAdapter:
@@ -23,11 +28,15 @@ class AceStepAdapter:
     def load(self) -> None:
         if self._dit_handler is not None:
             return
+        load_started = perf_counter()
         project_root = self._settings.acestep_project_root
         if project_root is None or not project_root.is_dir():
             raise RuntimeError(
                 "Configura ACESTEP_PROJECT_ROOT con la instalación oficial de ACE-Step 1.5."
             )
+
+        resolved_project_root = project_root.expanduser().resolve()
+        os.environ["ACESTEP_PROJECT_ROOT"] = str(resolved_project_root)
 
         cache_directory = self._settings.model_cache_directory.expanduser().resolve()
         cache_directory.mkdir(parents=True, exist_ok=True)
@@ -48,7 +57,7 @@ class AceStepAdapter:
             raise RuntimeError("La instalación de ACE-Step no expone AceStepHandler.")
         handler = handler_type()
         initialize_status, initialized = handler.initialize_service(
-            project_root=str(project_root.expanduser().resolve()),
+            project_root=str(resolved_project_root),
             config_path=self._settings.acestep_model_config,
             device=self._settings.acestep_device,
             use_flash_attention=False,
@@ -64,6 +73,13 @@ class AceStepAdapter:
         if not initialized:
             raise RuntimeError(f"ACE-Step no pudo inicializarse: {initialize_status}")
         self._dit_handler = handler
+        logger.info(
+            "Loaded ACE-Step model=%s device=%s dtype=%s load_seconds=%.2f",
+            self._settings.acestep_model_config,
+            getattr(handler, "device", self._settings.acestep_device),
+            getattr(handler, "dtype", "unknown"),
+            perf_counter() - load_started,
+        )
 
     def unload(self) -> None:
         self._dit_handler = None
@@ -103,6 +119,14 @@ class AceStepAdapter:
             use_random_seed=False,
         )
 
+        torch = sys.modules.get("torch")
+        cuda = getattr(torch, "cuda", None)
+        cuda_available = bool(cuda is not None and cuda.is_available())
+        if cuda_available and cuda is not None:
+            cuda.synchronize()
+            cuda.reset_peak_memory_stats()
+        generation_started = perf_counter()
+
         staging_root = self._settings.media_directory.expanduser().resolve() / ".staging"
         staging_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="acestep-", dir=staging_root) as output_directory:
@@ -112,6 +136,23 @@ class AceStepAdapter:
                 params,
                 config,
                 save_dir=output_directory,
+            )
+            if cuda_available and cuda is not None:
+                cuda.synchronize()
+            elapsed_seconds = perf_counter() - generation_started
+            peak_memory_mib = (
+                round(cuda.max_memory_reserved() / (1024 * 1024))
+                if cuda_available and cuda is not None
+                else None
+            )
+            logger.info(
+                "ACE-Step generation model=%s device=%s dtype=%s seconds=%.2f "
+                "cuda_peak_reserved_mib=%s",
+                self._settings.acestep_model_config,
+                getattr(self._dit_handler, "device", self._settings.acestep_device),
+                getattr(self._dit_handler, "dtype", "unknown"),
+                elapsed_seconds,
+                peak_memory_mib,
             )
             if not result.success:
                 message = result.error or result.status_message or "falló la generación de audio"

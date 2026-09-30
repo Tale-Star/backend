@@ -22,7 +22,7 @@ from app.shared.errors import ErrorResponse
 
 router = APIRouter(
     prefix="/generations",
-    tags=["generations"],
+    tags=["Generative Media"],
     responses={
         401: {"model": ErrorResponse, "description": "Authentication required."},
         422: {"model": ErrorResponse, "description": "Request validation failed."},
@@ -30,7 +30,7 @@ router = APIRouter(
 )
 media_router = APIRouter(
     prefix="/media",
-    tags=["media"],
+    tags=["Media"],
     responses={
         401: {"model": ErrorResponse, "description": "Authentication required."},
         404: {"model": ErrorResponse, "description": "Asset not found."},
@@ -57,10 +57,9 @@ def get_media_by_id(
         path = storage.resolve_key(asset.path, user.id)
     except (FileNotFoundError, ValueError):
         raise HTTPException(status_code=404, detail="Media asset not found") from None
-    media_type, _encoding = mimetypes.guess_type(path.name)
     return FileResponse(
         path,
-        media_type=media_type or asset.media_type or "application/octet-stream",
+        media_type=_media_type_for(path.name, asset.media_type),
         headers={"X-Content-Type-Options": "nosniff"},
     )
 
@@ -77,10 +76,9 @@ def get_media(
         path = storage.resolve_key(asset_key, user.id)
     except (FileNotFoundError, ValueError):
         raise HTTPException(status_code=404, detail="Media asset not found") from None
-    media_type, _encoding = mimetypes.guess_type(path.name)
     return FileResponse(
         path,
-        media_type=media_type or "application/octet-stream",
+        media_type=_media_type_for(path.name),
         headers={"X-Content-Type-Options": "nosniff"},
     )
 
@@ -132,3 +130,13 @@ def get_generation(
     if job is None:
         raise HTTPException(status_code=404, detail="Generation job not found")
     return GenerationJobResponse.model_validate(job)
+
+
+def _media_type_for(filename: str, stored_media_type: str | None = None) -> str:
+    """Prefer the trusted media type recorded with an asset over OS MIME guesses."""
+    if stored_media_type:
+        return stored_media_type
+    if filename.lower().endswith(".flac"):
+        return "audio/flac"
+    media_type, _encoding = mimetypes.guess_type(filename)
+    return media_type or "application/octet-stream"

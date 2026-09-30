@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 import app.generative_media.infrastructure.acestep_adapter as acestep_module
+import app.generative_media.infrastructure.zimage_adapter as zimage_module
 from app.generative_media.domain.generation_job import GenerationType
 from app.generative_media.infrastructure.acestep_adapter import (
     AceStepAdapter,
@@ -258,6 +259,50 @@ def test_zimage_adapter_preserves_seed_and_style_profile(tmp_path: Path) -> None
     assert image_pipeline.active_adapter == ("talestar-style-profile", 0.7)
     assert result.seed == 42
     assert result.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_zimage_load_uses_diffusers_supported_torch_dtype_argument(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, Any] = {}
+    fake_dtype = object()
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: False), float32=fake_dtype
+    )
+
+    class FakePipeline:
+        @classmethod
+        def from_pretrained(cls, model_path: str, **kwargs: Any) -> FakePipeline:
+            captured["model_path"] = model_path
+            captured.update(kwargs)
+            return cls()
+
+        def to(self, device: str) -> None:
+            assert device == "cpu"
+
+    monkeypatch.setattr(
+        zimage_module,
+        "import_module",
+        lambda module_name: {
+            "torch": fake_torch,
+            "diffusers": SimpleNamespace(ZImagePipeline=FakePipeline),
+        }[module_name],
+    )
+    adapter = ZImageAdapter(
+        Settings(
+            zimage_model_path=str(tmp_path / "z-image"),
+            zimage_device="cpu",
+            zimage_dtype="float32",
+            zimage_cpu_offload=False,
+            model_cache_directory=tmp_path / "cache",
+        )
+    )
+
+    adapter.load()
+
+    assert captured["torch_dtype"] is fake_dtype
+    assert "dtype" not in captured
+    assert captured["local_files_only"] is True
 
 
 def test_fake_generators_remain_usable_without_model_runtime() -> None:

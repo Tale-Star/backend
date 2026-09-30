@@ -5,11 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api.health import router as health_router
@@ -48,17 +47,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine.dispose()
 
     application = FastAPI(
-        title=app_settings.app_name,
+        title="Tale Star Backend API",
+        description=(
+            "Backend API for Tale Star's educational storytelling platform, "
+            "including user-authored stories and AI-generated images and music."
+        ),
         version="0.1.0",
         debug=app_settings.app_debug,
         lifespan=lifespan,
         openapi_tags=[
-            {"name": "health", "description": "API health checks."},
-            {"name": "identity-access", "description": "Adult account and parental PIN."},
-            {"name": "creative-authoring", "description": "Characters, scenarios and stories."},
-            {"name": "generations", "description": "Asynchronous image and music jobs."},
-            {"name": "media", "description": "Owned generated media assets."},
-            {"name": "content-library", "description": "Saved content references and favorites."},
+            {"name": "Health", "description": "Service health checks."},
+            {"name": "Authentication", "description": "Accounts, access tokens and parental PIN."},
+            {
+                "name": "Creative Authoring",
+                "description": "Characters, scenarios, styles and stories.",
+            },
+            {"name": "Generative Media", "description": "Asynchronous image and music jobs."},
+            {"name": "Content Library", "description": "Saved content references and favorites."},
+            {"name": "Media", "description": "Owned generated media assets."},
         ],
     )
     application.state.settings = app_settings
@@ -69,18 +75,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.asset_storage = media_storage
     application.state.generation_job_service_factory = _build_generation_job_service
 
-    smoke_test_page = Path(__file__).resolve().parent.parent / "smoke-test" / "index.html"
-    if app_settings.app_env in {"local", "test"} and smoke_test_page.is_file():
-
-        def serve_smoke_test_page() -> FileResponse:
-            return FileResponse(smoke_test_page, media_type="text/html")
-
-        application.add_api_route(
-            "/smoke-test",
-            serve_smoke_test_page,
-            methods=["GET"],
-            include_in_schema=False,
-        )
+    @application.get("/", include_in_schema=False)
+    def redirect_to_api_docs() -> RedirectResponse:
+        return RedirectResponse(url="/docs", status_code=307)
 
     if app_settings.cors_origins:
         application.add_middleware(

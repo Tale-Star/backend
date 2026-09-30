@@ -31,7 +31,7 @@ from app.identity_access.interfaces.dependencies import get_current_user
 from app.shared.errors import AppError, ErrorResponse
 
 router = APIRouter(
-    tags=["creative-authoring"],
+    tags=["Creative Authoring"],
     responses={
         401: {"model": ErrorResponse, "description": "Authentication required."},
         422: {"model": ErrorResponse, "description": "Request validation failed."},

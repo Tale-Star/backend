@@ -13,7 +13,10 @@ from sqlalchemy.orm import Session
 
 from app.generative_media.application.generation_ports import GeneratedMedia
 from app.generative_media.application.generation_worker import GenerationWorker
-from app.generative_media.domain.generation_job import GenerationJob, GenerationType
+from app.generative_media.domain.generation_job import (
+    GenerationJob,
+    GenerationType,
+)
 from app.generative_media.infrastructure.fake_generators import (
     FakeImageGeneratorAdapter,
     FakeMusicGeneratorAdapter,
@@ -206,6 +209,30 @@ def test_media_endpoint_rejects_traversal(
     response = api_client.get("/api/v1/media/%2e%2e%2foutside.txt", headers=auth_headers)
 
     assert response.status_code == 404
+
+
+def test_flac_media_uses_the_persisted_mime_type(
+    api_app: FastAPI,
+    api_client: TestClient,
+    auth_headers: dict[str, str],
+    test_settings: Settings,
+) -> None:
+    user_id = UUID(api_client.get("/api/v1/auth/me", headers=auth_headers).json()["id"])
+    asset_id = uuid4()
+    storage = LocalAssetStorage(test_settings.media_directory)
+    asset_path = storage.save(asset_id, ".flac", b"fLaC test bytes", user_id)
+    job = GenerationJob(type=GenerationType.MUSIC, payload={}, owner_id=user_id)
+    job.mark_processing()
+    job.mark_succeeded({"asset_id": str(asset_id), "path": asset_path, "media_type": "audio/flac"})
+    with api_app.state.session_factory() as session:
+        SqlAlchemyGenerationJobRepository(session).add(job)
+
+    by_id = api_client.get(f"/api/v1/media/assets/{asset_id}", headers=auth_headers)
+    by_path = api_client.get(f"/api/v1/media/{asset_path}", headers=auth_headers)
+
+    assert by_id.status_code == by_path.status_code == 200
+    assert by_id.headers["content-type"] == "audio/flac"
+    assert by_path.headers["content-type"] == "audio/flac"
 
 
 def test_media_endpoint_enforces_owner_and_missing_asset_returns_404(

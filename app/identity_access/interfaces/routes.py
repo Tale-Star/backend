@@ -24,7 +24,7 @@ from app.shared.errors import AppError, ErrorResponse
 
 router = APIRouter(
     prefix="/auth",
-    tags=["identity-access"],
+    tags=["Authentication"],
     responses={
         422: {"model": ErrorResponse, "description": "Request validation failed."},
     },

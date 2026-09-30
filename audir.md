@@ -20,3 +20,7 @@
 - Guardar referencias de biblioteca solo despues de validar owner y tipo del recurso.
 - El texto de stories lo escribe el usuario; AR pertenece a Flutter/on-device.
 - Mantener módulos y archivos en `snake_case`, clases en `PascalCase`.
+
+- Diffusers 0.37.1: cargar `ZImagePipeline` con `torch_dtype`; `dtype` se ignora.
+- Para `.flac`, priorizar `media_type` persistido; Windows puede adivinar `audio/x-flac`.
+- ACE-Step `initialize_service` exige su bundle `main` con LM 1.7B; no inicializar el LM al generar con `thinking=false` y caption/letras ya provistos.

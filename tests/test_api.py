@@ -15,16 +15,23 @@ def test_health_routes(test_settings: Settings) -> None:
         assert client.get("/api/v1/health").json() == {"status": "ok"}
 
 
-def test_local_smoke_test_page_is_served_from_the_api(test_settings: Settings) -> None:
+def test_docs_and_openapi_are_available_and_root_redirects(test_settings: Settings) -> None:
     application = create_app(test_settings)
 
     with TestClient(application) as client:
-        response = client.get("/smoke-test")
+        docs = client.get("/docs")
+        redoc = client.get("/redoc")
+        openapi = client.get("/openapi.json")
+        root = client.get("/", follow_redirects=False)
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/html")
-    assert "Generate Test Music" in response.text
-    assert "Generate Test Image" in response.text
+    assert docs.status_code == 200
+    assert "swagger-ui" in docs.text
+    assert redoc.status_code == 200
+    assert "redoc" in redoc.text.lower()
+    assert openapi.status_code == 200
+    assert root.status_code == 307
+    assert root.headers["location"] == "/docs"
+    assert "/docs" not in openapi.json()["paths"]
 
 
 def test_openapi_lists_frontend_routes_and_consistent_responses(test_settings: Settings) -> None:
@@ -33,8 +40,25 @@ def test_openapi_lists_frontend_routes_and_consistent_responses(test_settings: S
     with TestClient(application) as client:
         schema = client.get("/openapi.json").json()
 
-    assert "creative-authoring" in {tag["name"] for tag in schema["tags"]}
+    assert schema["info"]["title"] == "Tale Star Backend API"
+    assert schema["info"]["version"] == "0.1.0"
+    assert schema["info"]["description"]
+    assert {tag["name"] for tag in schema["tags"]} == {
+        "Health",
+        "Authentication",
+        "Creative Authoring",
+        "Generative Media",
+        "Content Library",
+        "Media",
+    }
     assert "/api/v1/library" in schema["paths"]
+    assert sum(len(operations) for operations in schema["paths"].values()) == 42
+    assert schema["components"]["securitySchemes"]["HTTPBearer"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
+    assert schema["paths"]["/api/v1/generations/images"]["post"]["security"] == [{"HTTPBearer": []}]
+    assert "security" not in schema["paths"]["/api/v1/auth/login"]["post"]
     responses = schema["paths"]["/api/v1/generations/images"]["post"]["responses"]
     assert "202" in responses
     assert responses["401"]["content"]["application/json"]["schema"]["$ref"].endswith(

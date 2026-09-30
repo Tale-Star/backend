@@ -45,8 +45,8 @@ class Settings(BaseSettings):
     zimage_device: Literal["auto", "cuda", "cpu"] = "auto"
     zimage_dtype: Literal["auto", "bfloat16", "float16", "float32"] = "auto"
     zimage_cpu_offload: bool = True
-    zimage_width: int = Field(default=1024, ge=256, le=1536, multiple_of=16)
-    zimage_height: int = Field(default=1024, ge=256, le=1536, multiple_of=16)
+    zimage_width: int = Field(default=512, ge=256, le=1536, multiple_of=16)
+    zimage_height: int = Field(default=512, ge=256, le=1536, multiple_of=16)
     zimage_inference_steps: int = Field(default=8, ge=1, le=50)
     zimage_style_profiles_file: Path | None = None
 
