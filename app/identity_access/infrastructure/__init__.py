@@ -1,0 +1,2 @@
+"""Adaptadores técnicos de IdentityAccess."""
+
