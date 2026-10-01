@@ -1,15 +1,17 @@
-"""Rutas HTTP de jobs de generación y assets locales."""
+"""Rutas HTTP de jobs de generación y assets."""
 
 import mimetypes
-from typing import Annotated
+from collections.abc import Iterator
+from pathlib import PurePosixPath
+from typing import Annotated, BinaryIO
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 
+from app.generative_media.application.asset_storage import AssetStorage
 from app.generative_media.application.generation_service import GenerationJobService
 from app.generative_media.domain.generation_job import GenerationType
-from app.generative_media.infrastructure.local_asset_storage import LocalAssetStorage
 from app.generative_media.interfaces.dependencies import get_generation_job_service
 from app.generative_media.interfaces.schemas import (
     GenerationJobResponse,
@@ -47,19 +49,19 @@ def get_media_by_id(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
     service: Annotated[GenerationJobService, Depends(get_generation_job_service)],
-) -> FileResponse:
+) -> StreamingResponse:
     """Resuelve un identificador de asset propio sin exponer su ruta de filesystem."""
     asset = service.get_asset(asset_id, user.id)
     if asset is None:
         raise HTTPException(status_code=404, detail="Media asset not found")
-    storage: LocalAssetStorage = request.app.state.media_storage
+    storage: AssetStorage = request.app.state.asset_storage
     try:
-        path = storage.resolve_key(asset.path, user.id)
+        asset_file = storage.open_key(asset.path, user.id)
     except (FileNotFoundError, ValueError):
         raise HTTPException(status_code=404, detail="Media asset not found") from None
-    return FileResponse(
-        path,
-        media_type=_media_type_for(path.name, asset.media_type),
+    return StreamingResponse(
+        _iter_asset(asset_file),
+        media_type=_media_type_for(PurePosixPath(asset.path).name, asset.media_type),
         headers={"X-Content-Type-Options": "nosniff"},
     )
 
@@ -69,16 +71,16 @@ def get_media(
     asset_key: str,
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
-) -> FileResponse:
-    """Sirve únicamente archivos dentro del directorio local de medios."""
-    storage: LocalAssetStorage = request.app.state.media_storage
+) -> StreamingResponse:
+    """Sirve una clave propia sin revelar su ubicación de almacenamiento."""
+    storage: AssetStorage = request.app.state.asset_storage
     try:
-        path = storage.resolve_key(asset_key, user.id)
+        asset_file = storage.open_key(asset_key, user.id)
     except (FileNotFoundError, ValueError):
         raise HTTPException(status_code=404, detail="Media asset not found") from None
-    return FileResponse(
-        path,
-        media_type=_media_type_for(path.name),
+    return StreamingResponse(
+        _iter_asset(asset_file),
+        media_type=_media_type_for(PurePosixPath(asset_key).name),
         headers={"X-Content-Type-Options": "nosniff"},
     )
 
@@ -140,3 +142,12 @@ def _media_type_for(filename: str, stored_media_type: str | None = None) -> str:
         return "audio/flac"
     media_type, _encoding = mimetypes.guess_type(filename)
     return media_type or "application/octet-stream"
+
+
+def _iter_asset(asset_file: BinaryIO) -> Iterator[bytes]:
+    """Transmite un asset por chunks y cierra el stream al terminar o cancelar."""
+    try:
+        while chunk := asset_file.read(64 * 1024):
+            yield chunk
+    finally:
+        asset_file.close()

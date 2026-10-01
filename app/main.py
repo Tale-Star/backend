@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from app.api.health import router as health_router
 from app.api.health import versioned_router as versioned_health_router
 from app.content_library.interfaces.routes import router as content_library_router
 from app.creative_authoring.interfaces.routes import router as creative_authoring_router
+from app.generative_media.application.asset_storage import AssetStorage
 from app.generative_media.application.generation_service import GenerationJobService
 from app.generative_media.infrastructure.generation_job_repository import (
     SqlAlchemyGenerationJobRepository,
@@ -71,8 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.engine = engine
     application.state.session_factory = session_factory
     media_storage = LocalAssetStorage(app_settings.media_directory)
-    application.state.media_storage = media_storage
-    application.state.asset_storage = media_storage
+    application.state.asset_storage = cast(AssetStorage, media_storage)
     application.state.generation_job_service_factory = _build_generation_job_service
 
     @application.get("/", include_in_schema=False)

@@ -1,12 +1,11 @@
 """Puerto de almacenamiento para archivos de medios."""
 
-from pathlib import Path
 from typing import BinaryIO, Protocol
 from uuid import UUID
 
 
 class AssetStorage(Protocol):
-    """Operaciones locales o remotas para almacenar bytes asociados a un UUID."""
+    """Operaciones locales o remotas para almacenar y leer assets propios."""
 
     def save(
         self, asset_id: UUID, extension: str, content: bytes, owner_id: UUID | None = None
@@ -14,12 +13,12 @@ class AssetStorage(Protocol):
         """Guarda bytes y devuelve una clave relativa estable."""
         ...
 
-    def open(self, asset_id: UUID, extension: str) -> BinaryIO:
+    def open(self, asset_id: UUID, extension: str, owner_id: UUID | None = None) -> BinaryIO:
         """Abre un asset para lectura binaria."""
         ...
 
-    def resolve_key(self, relative_key: str, owner_id: UUID | None = None) -> Path:
-        """Resuelve una clave relativa previamente guardada, sin traversal."""
+    def open_key(self, relative_key: str, owner_id: UUID | None = None) -> BinaryIO:
+        """Abre un asset por su clave opaca validando ownership."""
         ...
 
     def delete(self, asset_id: UUID, extension: str) -> None:

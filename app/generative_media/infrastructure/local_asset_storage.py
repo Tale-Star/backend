@@ -59,6 +59,10 @@ class LocalAssetStorage:
             raise ValueError("El usuario no es propietario del asset.")
         return candidate
 
+    def open_key(self, relative_key: str, owner_id: UUID | None = None) -> BinaryIO:
+        """Abre una clave validada sin exponer rutas de filesystem al llamador."""
+        return self.resolve_key(relative_key, owner_id).open("rb")
+
     def delete(self, asset_id: UUID, extension: str, owner_id: UUID | None = None) -> None:
         """Elimina un archivo si está presente."""
         self._path_for(asset_id, extension, owner_id).unlink(missing_ok=True)

@@ -1,26 +1,12 @@
-# Auditoría breve
+# Auditoría técnica breve
 
-- Mantener explícitos los límites y dependencias entre bounded contexts.
-- El dominio permanece Python puro: sin FastAPI, SQLAlchemy ni librerías de IA.
-- Cambiar el esquema solo con Alembic; SQLite local debe conservar WAL.
-- Usar UUID en identificadores de dominio y no introducir Event Sourcing.
-- Reclamar jobs con un UPDATE atómico condicionado por Pending para impedir dobles ejecuciones.
-- Mantener los modelos detrás de adapters de infraestructura; usar la API oficial vigente de Diffusers y ACE-Step.
-- No cargar simultáneamente Z-Image y ACE-Step; compartir GPU_QUEUE_LOCK_PATH entre workers y liberar el runtime al cambiar de tipo.
-- Mantener los tests normales en fake mode y exigir activación explícita para integración local con modelos.
-- Leer configuración desde settings y `.env`; nunca versionar secretos.
-- Mantener pesos y cachés fuera del repositorio; no descargar modelos grandes durante tests.
-- Usar `APP_DEBUG` en vez de `DEBUG` para evitar colisiones con variables globales.
-- No anadir Redis, Celery ni microservicios para el MVP local.
-- Auth MVP: una cuenta adulta, JWT, Argon2 y PIN hasheado; sin roles, OAuth ni refresh rotation.
-- Filtrar jobs, contenido y biblioteca por owner en cada consulta; IDs conocidos no autorizan acceso.
-- Guardar assets bajo el UUID del owner y validar ruta, raiz y enlaces simbolicos al servirlos.
-- Preferir rutas de media por AssetId; mantener la resolucion de filesystem dentro de infraestructura.
-- Importar todos los modelos de infraestructura en Alembic para que detecte el esquema completo.
-- Guardar referencias de biblioteca solo despues de validar owner y tipo del recurso.
-- El texto de stories lo escribe el usuario; AR pertenece a Flutter/on-device.
-- Mantener módulos y archivos en `snake_case`, clases en `PascalCase`.
-
-- Diffusers 0.37.1: cargar `ZImagePipeline` con `torch_dtype`; `dtype` se ignora.
-- Para `.flac`, priorizar `media_type` persistido; Windows puede adivinar `audio/x-flac`.
-- ACE-Step `initialize_service` exige su bundle `main` con LM 1.7B; no inicializar el LM al generar con `thinking=false` y caption/letras ya provistos.
+- Docker Desktop/containerd presentó errores `read-only`, I/O y snapshotter; se reparó y el almacenamiento pesado quedó en `E:\Docker\Data`.
+- El primer build del worker falló al extraer cuBLAS durante la corrupción del daemon. Tras reparar Docker, el build CUDA terminó correctamente.
+- Z-Image agotó la memoria WSL; se asignaron 20 GB de RAM y 8 GB de swap en E:. La prueba real posterior pasó.
+- ACE-Step 1.5 Turbo: FLAC, `vocal_language` (`en`/`es`), `thinking=false`, batch 1, 8 pasos y shift 3.0. Caption y lyrics son deterministas, sin LLM adicional.
+- Diffusers 0.37.1: `ZImagePipeline` usa `torch_dtype`; Z-Image Turbo corre con 8 pasos y BF16. Pesos y caches quedan fuera del repositorio e imágenes.
+- Docker validó API CPU, worker CUDA y RTX 3060; ACE-Step y Z-Image generaron assets reales que llegaron a Succeeded y se sirvieron por Media.
+- Mantener SQLite WAL/foreign keys en el adaptador SQLAlchemy, condicionado a SQLite; `DATABASE_URL` es configurable. El dominio y los casos de uso no deben conocer SQL ni filesystem.
+- Toda lectura y escritura de assets pasa por `AssetStorage`; `LocalAssetStorage` valida rutas/ownership. Adaptadores futuros de object storage no deben cambiar casos de uso.
+- Mantener jobs con claim atómico, bloqueo GPU inter-process y un solo runtime de modelo activo. Tests normales usan fake adapters; nunca descargar modelos en pytest.
+- Preservar separación de bounded contexts, UUID, ownership por usuario y texto de cuentos escrito por el usuario. Secretos, `.env`, modelos, caches, DB local y medios generados no se versionan.
