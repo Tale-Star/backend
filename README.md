@@ -63,3 +63,10 @@ Backend for Tale Star, an educational platform for creating and managing illustr
 - `http://<host>:<port>/docs` - Swagger UI
 - `http://<host>:<port>/redoc` - ReDoc
 - `http://<host>:<port>/openapi.json` - OpenAPI schema
+
+## Docker
+
+- `docker compose build`
+- `docker compose run --rm api alembic upgrade head`
+- `docker compose up`
+- `docker compose down`

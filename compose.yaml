@@ -1,0 +1,82 @@
+name: talestar
+
+x-app-environment: &app-environment
+  APP_ENV: ${APP_ENV:-local}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: sqlite:////var/lib/talestar/talestar.db
+  ASSETS_DIRECTORY: /var/lib/talestar/assets
+  MEDIA_DIRECTORY: /var/lib/talestar/media
+  GPU_QUEUE_LOCK_PATH: /var/lib/talestar/gpu-queue.lock
+  CORS_ORIGINS: "${CORS_ORIGINS:-[\"http://localhost:5173\",\"http://127.0.0.1:5173\"]}"
+  SQLITE_BUSY_TIMEOUT_MS: ${SQLITE_BUSY_TIMEOUT_MS:-5000}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-development-only-change-this-jwt-secret-before-deployment-32chars}
+  JWT_ACCESS_TOKEN_MINUTES: ${JWT_ACCESS_TOKEN_MINUTES:-30}
+
+services:
+  api:
+    image: talestar-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: talestar-api
+    environment:
+      <<: *app-environment
+      PORT: ${API_CONTAINER_PORT:-8000}
+    ports:
+      - "${API_PORT:-8000}:${API_CONTAINER_PORT:-8000}"
+    volumes:
+      - talestar-data:/var/lib/talestar
+    restart: unless-stopped
+
+  worker:
+    image: talestar-worker:local
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: talestar-worker
+    environment:
+      <<: *app-environment
+      IMAGE_GENERATOR: ${IMAGE_GENERATOR:-zimage}
+      MUSIC_GENERATOR: ${MUSIC_GENERATOR:-acestep}
+      MODEL_CACHE_DIRECTORY: /cache/huggingface
+      MODEL_DOWNLOADS_ENABLED: "false"
+      ZIMAGE_MODEL_PATH: /models/zimage
+      ZIMAGE_DEVICE: ${ZIMAGE_DEVICE:-cuda}
+      ZIMAGE_DTYPE: ${ZIMAGE_DTYPE:-bfloat16}
+      ZIMAGE_CPU_OFFLOAD: ${ZIMAGE_CPU_OFFLOAD:-true}
+      ZIMAGE_WIDTH: ${ZIMAGE_WIDTH:-512}
+      ZIMAGE_HEIGHT: ${ZIMAGE_HEIGHT:-512}
+      ZIMAGE_INFERENCE_STEPS: ${ZIMAGE_INFERENCE_STEPS:-8}
+      ACESTEP_PROJECT_ROOT: /opt/ace-step
+      ACESTEP_MODEL_CONFIG: ${ACESTEP_MODEL_CONFIG:-acestep-v15-turbo}
+      ACESTEP_DEVICE: ${ACESTEP_DEVICE:-cuda}
+      ACESTEP_OFFLOAD_TO_CPU: ${ACESTEP_OFFLOAD_TO_CPU:-true}
+      ACESTEP_OFFLOAD_DIT_TO_CPU: ${ACESTEP_OFFLOAD_DIT_TO_CPU:-true}
+      ACESTEP_QUANTIZATION: ${ACESTEP_QUANTIZATION:-none}
+    volumes:
+      - talestar-data:/var/lib/talestar
+      - type: bind
+        source: ${MODEL_CACHE_HOST_PATH:-${MODEL_CACHE_DIRECTORY:-../model-cache/huggingface}}
+        target: /cache/huggingface
+      - type: bind
+        source: ${ZIMAGE_MODEL_HOST_PATH:-${ZIMAGE_MODEL_PATH:-../models/zimage}}
+        target: /models/zimage
+        read_only: true
+      - type: bind
+        source: ${ACESTEP_MODEL_HOST_PATH:-${ACESTEP_PROJECT_ROOT:-../models/acestep}/checkpoints}
+        target: /opt/ace-step/checkpoints
+        read_only: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 15m
+
+volumes:
+  talestar-data:

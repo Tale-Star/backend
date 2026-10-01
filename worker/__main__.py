@@ -1,7 +1,9 @@
 """Entrada para `python -m worker`."""
 
 import logging
-import time
+import signal
+from threading import Event
+from types import FrameType
 
 from app.generative_media.application.generation_worker import GenerationWorker
 from app.generative_media.infrastructure.acestep_adapter import AceStepAdapter
@@ -32,6 +34,17 @@ def main() -> None:
     configure_logging(settings.log_level)
     engine = create_database_engine(settings)
     session_factory = create_session_factory(engine)
+    shutdown_requested = Event()
+
+    def handle_shutdown_signal(signal_number: int, _frame: FrameType | None) -> None:
+        logger.info(
+            "Worker recibió señal %s; terminará el trabajo en curso y descargará runtimes",
+            signal_number,
+        )
+        shutdown_requested.set()
+
+    previous_sigint = signal.signal(signal.SIGINT, handle_shutdown_signal)
+    previous_sigterm = signal.signal(signal.SIGTERM, handle_shutdown_signal)
 
     logger.info(
         "Worker iniciado (image=%s, music=%s); media directory: %s",
@@ -62,18 +75,20 @@ def main() -> None:
                 queue_lock=queue_lock,
             )
             try:
-                while True:
+                while not shutdown_requested.is_set():
                     job_id = processor.run_once()
                     if job_id is None:
-                        time.sleep(1)
+                        shutdown_requested.wait(1)
                     else:
                         logger.info("GenerationJob procesado: %s", job_id)
             finally:
                 processor.release()
-    except KeyboardInterrupt:
-        logger.info("Worker detenido")
     finally:
         engine.dispose()
+        signal.signal(signal.SIGINT, previous_sigint)
+        signal.signal(signal.SIGTERM, previous_sigterm)
+
+    logger.info("Worker detenido limpiamente")
 
 
 if __name__ == "__main__":
