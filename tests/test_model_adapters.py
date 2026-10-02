@@ -22,12 +22,30 @@ from app.generative_media.infrastructure.acestep_adapter import (
 )
 from app.generative_media.infrastructure.generation_queue_lock import FileGenerationQueueLock
 from app.generative_media.infrastructure.generation_runtime import SequentialGenerationRuntime
+from app.generative_media.infrastructure.model_assets import LORA_ASSETS
+from app.generative_media.infrastructure.prompt_translation import _is_spanish
 from app.generative_media.infrastructure.style_profiles import (
     StyleProfileConfiguration,
     StyleProfileRegistry,
 )
 from app.generative_media.infrastructure.zimage_adapter import ZImageAdapter, build_zimage_prompt
 from app.shared.config.settings import Settings
+
+
+def test_prompt_language_detection_handles_short_spanish_prompts() -> None:
+    assert _is_spanish("Hola")
+    assert _is_spanish("un oso pardo, ojos grandes")
+    assert not _is_spanish("a little bear, large eyes")
+
+
+def test_requested_loras_are_registered_with_turbo_downloads() -> None:
+    assert {asset.filename for asset in LORA_ASSETS.values()} == {
+        "FlatAnimeStyle_ZIT.safetensors",
+        "z_lora_amelicart_000001750.safetensors",
+        "zimagebase_flat_color_v2.1.safetensors",
+    }
+    assert {asset.base_model for asset in LORA_ASSETS.values()} == {"z-image-turbo"}
+    assert all(asset.download_url for asset in LORA_ASSETS.values())
 
 
 def test_zimage_prompt_maps_frontend_fields_in_stable_order() -> None:
@@ -51,11 +69,25 @@ def test_zimage_prompt_maps_frontend_fields_in_stable_order() -> None:
         "Creative prompt: storybook. Watercolor, hand painted"
     )
 
+    expanded_prompt = build_zimage_prompt(
+        {
+            "Characters": ["Mira"],
+            "CharacterDescriptions": [
+                {"name": "Mira", "description": "small violet creature, glowing eyes"}
+            ],
+            "Action": "running",
+        }
+    )
+    assert "Character appearance: small violet creature, glowing eyes" in expanded_prompt
+    assert "Mira" not in expanded_prompt
+    assert "Mira" not in build_zimage_prompt({"Characters": ["Mira"], "CharacterDescriptions": []})
+
 
 def test_style_profile_registry_keeps_runtime_settings_private(tmp_path) -> None:
     profile_file = tmp_path / "profiles.json"
     profile_file.write_text(
         '{"Watercolor": {"prompt": "soft paint", "lora_path": "models/style.safetensors", '
+        '"lora_asset": "flat_anime_style_zit", '
         '"lora_scale": 0.7}}',
         encoding="utf-8",
     )
@@ -64,6 +96,7 @@ def test_style_profile_registry_keeps_runtime_settings_private(tmp_path) -> None
     profile = registry.resolve("watercolor")
 
     assert profile.prompt_instruction == "soft paint"
+    assert profile.lora_asset_id == "flat_anime_style_zit"
     assert profile.lora_path == (tmp_path / "models/style.safetensors").resolve()
     assert profile.lora_scale == 0.7
 
@@ -157,6 +190,7 @@ def test_acestep_adapter_passes_turbo_parameters_to_public_inference_api(
         acestep_project_root=tmp_path,
         media_directory=tmp_path / "media",
         model_cache_directory=tmp_path / "cache",
+        model_downloads_enabled=False,
     )
     adapter = AceStepAdapter(settings)
 
@@ -295,6 +329,7 @@ def test_zimage_load_uses_diffusers_supported_torch_dtype_argument(
             zimage_dtype="float32",
             zimage_cpu_offload=False,
             model_cache_directory=tmp_path / "cache",
+            model_downloads_enabled=False,
         )
     )
 
@@ -303,6 +338,51 @@ def test_zimage_load_uses_diffusers_supported_torch_dtype_argument(
     assert captured["torch_dtype"] is fake_dtype
     assert "dtype" not in captured
     assert captured["local_files_only"] is True
+
+
+def test_zimage_turbo_uses_bfloat16_sequential_cpu_offload(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, Any] = {}
+    fake_dtype = object()
+
+    class FakePipeline:
+        @classmethod
+        def from_pretrained(cls, model_path: str, **kwargs: Any) -> FakePipeline:
+            captured["model_path"] = model_path
+            captured.update(kwargs)
+            return cls()
+
+        def enable_sequential_cpu_offload(self) -> None:
+            captured["sequential_offload"] = True
+
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: True),
+        bfloat16=fake_dtype,
+    )
+    monkeypatch.setattr(
+        zimage_module,
+        "import_module",
+        lambda module_name: {
+            "torch": fake_torch,
+            "diffusers": SimpleNamespace(ZImagePipeline=FakePipeline),
+        }[module_name],
+    )
+    adapter = ZImageAdapter(
+        Settings(
+            zimage_device="cuda",
+            zimage_dtype="bfloat16",
+            zimage_cpu_offload=True,
+            zimage_sequential_cpu_offload=True,
+            model_downloads_enabled=False,
+            model_cache_directory=tmp_path / "cache",
+        )
+    )
+
+    adapter.load()
+
+    assert captured["torch_dtype"] is fake_dtype
+    assert captured["sequential_offload"] is True
 
 
 def test_fake_generators_remain_usable_without_model_runtime() -> None:

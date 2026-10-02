@@ -68,13 +68,77 @@ def test_image_job_is_created_and_status_can_be_queried(
     job = created.json()
     assert job["type"] == "Image"
     assert job["status"] == "Pending"
-    assert job["payload"] == IMAGE_REQUEST
+    assert job["payload"] == {**IMAGE_REQUEST, "CharacterDescriptions": []}
     assert job["seed"] == 41
     assert job["attempts"] == 0
 
     queried = api_client.get(f"/api/v1/generations/{job['id']}", headers=auth_headers)
     assert queried.status_code == 200
     assert queried.json() == job
+
+
+def test_image_job_expands_owned_character_mentions(
+    api_client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    created_character = api_client.post(
+        "/api/v1/characters",
+        json={
+            "name": "Lumi",
+            "description": "",
+            "visual_description": "Una criatura violeta, pequeña y luminosa",
+            "attributes": {},
+        },
+        headers=auth_headers,
+    )
+    assert created_character.status_code == 201
+
+    response = api_client.post(
+        "/api/v1/generations/images",
+        json={**IMAGE_REQUEST, "Action": "@Lumi salta sobre @Lumi", "Characters": ["Lumi"]},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 202
+    payload = response.json()["payload"]
+    assert "@Lumi" not in payload["Action"]
+    assert payload["CharacterDescriptions"] == [
+        {"name": "Lumi", "description": "Una criatura violeta, pequeña, luminosa"}
+    ]
+    assert "criatura violeta" in payload["Action"].casefold()
+
+
+def test_image_job_includes_selected_backend_style_profile_details(
+    api_client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    created_profile = api_client.post(
+        "/api/v1/style-profiles",
+        json={
+            "name": "Flat Anime Style",
+            "description": "Flat colors for storybook art",
+            "prompt_modifier": "clean flat colors, soft outlines",
+            "visual_settings": {
+                "zimage_lora_asset": "flat_anime_style_zit",
+                "zimage_lora_scale": 0.8,
+            },
+        },
+        headers=auth_headers,
+    )
+    assert created_profile.status_code == 201
+
+    response = api_client.post(
+        "/api/v1/generations/images",
+        json={**IMAGE_REQUEST, "Style": "Flat Anime Style"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 202
+    assert response.json()["payload"]["StyleProfileDetails"] == {
+        "prompt_modifier": "clean flat colors, soft outlines",
+        "visual_settings": {
+            "zimage_lora_asset": "flat_anime_style_zit",
+            "zimage_lora_scale": 0.8,
+        },
+    }
 
 
 def test_music_job_persists_frontend_contract(

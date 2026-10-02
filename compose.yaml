@@ -40,11 +40,15 @@ services:
       IMAGE_GENERATOR: ${IMAGE_GENERATOR:-zimage}
       MUSIC_GENERATOR: ${MUSIC_GENERATOR:-acestep}
       MODEL_CACHE_DIRECTORY: /cache/huggingface
-      MODEL_DOWNLOADS_ENABLED: "false"
-      ZIMAGE_MODEL_PATH: /models/zimage
+      MODEL_DOWNLOADS_ENABLED: ${MODEL_DOWNLOADS_ENABLED:-true}
+      PROMPT_TRANSLATION_MODEL: ${PROMPT_TRANSLATION_MODEL:-Helsinki-NLP/opus-mt-es-en}
+      ZIMAGE_MODEL_PATH: ${ZIMAGE_MODEL_PATH:-Tongyi-MAI/Z-Image-Turbo}
+      ZIMAGE_STYLE_PROFILES_FILE: /app/config/zimage-style-profiles.json
+      ZIMAGE_LORA_DIRECTORY: /models/loras
       ZIMAGE_DEVICE: ${ZIMAGE_DEVICE:-cuda}
       ZIMAGE_DTYPE: ${ZIMAGE_DTYPE:-bfloat16}
       ZIMAGE_CPU_OFFLOAD: ${ZIMAGE_CPU_OFFLOAD:-true}
+      ZIMAGE_SEQUENTIAL_CPU_OFFLOAD: ${ZIMAGE_SEQUENTIAL_CPU_OFFLOAD:-true}
       ZIMAGE_WIDTH: ${ZIMAGE_WIDTH:-512}
       ZIMAGE_HEIGHT: ${ZIMAGE_HEIGHT:-512}
       ZIMAGE_INFERENCE_STEPS: ${ZIMAGE_INFERENCE_STEPS:-8}
@@ -60,13 +64,11 @@ services:
         source: ${MODEL_CACHE_HOST_PATH:-${MODEL_CACHE_DIRECTORY:-../model-cache/huggingface}}
         target: /cache/huggingface
       - type: bind
-        source: ${ZIMAGE_MODEL_HOST_PATH:-${ZIMAGE_MODEL_PATH:-../models/zimage}}
-        target: /models/zimage
-        read_only: true
+        source: ${ZIMAGE_LORA_HOST_PATH:-../models/zimage/loras}
+        target: /models/loras
       - type: bind
         source: ${ACESTEP_MODEL_HOST_PATH:-${ACESTEP_PROJECT_ROOT:-../models/acestep}/checkpoints}
         target: /opt/ace-step/checkpoints
-        read_only: true
     deploy:
       resources:
         reservations:

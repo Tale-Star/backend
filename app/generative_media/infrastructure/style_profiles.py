@@ -14,6 +14,7 @@ class StyleProfileConfiguration:
     prompt_instruction: str
     lora_path: Path | None = None
     lora_scale: float = 1.0
+    lora_asset_id: str | None = None
 
 
 class StyleProfileRegistry:
@@ -50,9 +51,12 @@ class StyleProfileRegistry:
                 raise ValueError("Cada StyleProfile debe apuntar a un objeto de configuración.")
             prompt = value.get("prompt", "")
             lora_path = value.get("lora_path")
+            lora_asset_id = value.get("lora_asset")
             lora_scale = value.get("lora_scale", 1.0)
             if not isinstance(prompt, str) or not isinstance(lora_scale, int | float):
                 raise ValueError(f"Configuración inválida para StyleProfile {name!r}.")
+            if lora_asset_id is not None and not isinstance(lora_asset_id, str):
+                raise ValueError(f"lora_asset invalid for StyleProfile {name!r}.")
             if not math.isfinite(lora_scale):
                 raise ValueError(f"lora_scale inválido para StyleProfile {name!r}.")
             resolved_lora_path: Path | None = None
@@ -67,5 +71,6 @@ class StyleProfileRegistry:
                 prompt_instruction=prompt,
                 lora_path=resolved_lora_path,
                 lora_scale=float(lora_scale),
+                lora_asset_id=lora_asset_id,
             )
         return profiles

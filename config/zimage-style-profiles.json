@@ -1,0 +1,17 @@
+{
+  "Flat Anime Style": {
+    "prompt": "children's storybook illustration, clean flat anime colors, soft outlines",
+    "lora_asset": "flat_anime_style_zit",
+    "lora_scale": 0.8
+  },
+  "Amelicart Illustration": {
+    "prompt": "children's book art, gentle chibi cartoon illustration, warm palette",
+    "lora_asset": "amelicart_illustration",
+    "lora_scale": 0.75
+  },
+  "Flat Color": {
+    "prompt": "children's story illustration, flat color shapes, clean composition",
+    "lora_asset": "flat_color_zimage_base",
+    "lora_scale": 0.75
+  }
+}

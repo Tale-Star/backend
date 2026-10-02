@@ -29,3 +29,33 @@ docker compose build
 docker compose run --rm api alembic upgrade head
 docker compose up
 ```
+
+## Model weights
+
+The repository contains model configuration and verified download metadata only. Do not commit
+model weights. Copy `.env.example` to `.env` and set `ACESTEP_PROJECT_ROOT` to an installed
+ACE-Step 1.5 source checkout. On the first generation, the worker downloads the selected ACE-Step
+1.5 Turbo checkpoint, its 5 Hz language model, the Qwen3 0.6B embedder, and VAE into the Hugging
+Face cache. Z-Image-Turbo is fetched by Diffusers on the first image generation. Selected LoRAs
+are fetched on demand and SHA-256 checked before use.
+
+The three registered profiles are `Flat Anime Style`, `Amelicart Illustration`, and `Flat Color`.
+Create a Tale Star StyleProfile with one of these names to select that LoRA from the UI. Its
+`visual_settings` may override `zimage_lora_asset` (`flat_anime_style_zit`,
+`amelicart_illustration`, or `flat_color_zimage_base`) and `zimage_lora_scale` (0 through 2).
+The configured cache, LoRA directory, and ACE-Step checkpoint directory are outside this
+checkout by default. A local copy in the Tale Star workspace is reused after checksum validation.
+
+To prefetch ACE-Step checkpoints and the registered LoRAs before the first generation, run from this directory:
+
+```sh
+python -m scripts.download_models
+```
+
+The ACE-Step prefetch needs several gigabytes of disk space and an internet connection.
+Z-Image-Turbo and its translation model are fetched lazily by their adapters. You may set
+`MODEL_DOWNLOADS_ENABLED=false` to require all weights to be preloaded. The prompt translator
+`Helsinki-NLP/opus-mt-es-en` is fetched only when a Spanish image prompt needs translation; it
+runs on CPU. Character `@mentions` are resolved against the authenticated user's stored
+characters before a generation job is queued, so the saved job contains the actual character
+descriptions rather than only their names.

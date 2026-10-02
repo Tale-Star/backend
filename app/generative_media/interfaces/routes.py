@@ -9,9 +9,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
+from app.creative_authoring.application.service import CreativeAuthoringService
+from app.creative_authoring.interfaces.dependencies import get_creative_authoring_service
 from app.generative_media.application.asset_storage import AssetStorage
 from app.generative_media.application.generation_service import GenerationJobService
 from app.generative_media.domain.generation_job import GenerationType
+from app.generative_media.infrastructure.character_prompt import enrich_image_payload
 from app.generative_media.interfaces.dependencies import get_generation_job_service
 from app.generative_media.interfaces.schemas import (
     GenerationJobResponse,
@@ -90,11 +93,30 @@ def create_image_generation(
     request: ImageGenerationRequest,
     user: Annotated[User, Depends(get_current_user)],
     service: Annotated[GenerationJobService, Depends(get_generation_job_service)],
+    authoring: Annotated[CreativeAuthoringService, Depends(get_creative_authoring_service)],
 ) -> GenerationJobResponse:
     """Persiste una solicitud de imagen sin ejecutar generación en el API."""
+    payload = enrich_image_payload(
+        request.model_dump(by_alias=True), authoring.list_characters(user.id)
+    )
+    style_name = request.style.strip().casefold()
+    if style_name:
+        style = next(
+            (
+                profile
+                for profile in authoring.list_style_profiles(user.id)
+                if profile.name.strip().casefold() == style_name
+            ),
+            None,
+        )
+        if style is not None:
+            payload["StyleProfileDetails"] = {
+                "prompt_modifier": style.prompt_modifier,
+                "visual_settings": style.visual_settings,
+            }
     job = service.create(
         GenerationType.IMAGE,
-        request.model_dump(by_alias=True),
+        payload,
         request.seed,
         user.id,
     )

@@ -22,6 +22,7 @@ def test_settings(tmp_path: Path) -> Settings:
         media_directory=tmp_path / "media",
         gpu_queue_lock_path=tmp_path / "gpu-queue.lock",
         cors_origins=["http://localhost:5173"],
+        model_downloads_enabled=False,
     )
 
 

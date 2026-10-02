@@ -13,6 +13,7 @@ from time import perf_counter
 from typing import Any
 
 from app.generative_media.application.generation_ports import GeneratedMedia
+from app.generative_media.infrastructure.model_assets import download_acestep_checkpoints
 from app.shared.config.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,8 @@ class AceStepAdapter:
 
         resolved_project_root = project_root.expanduser().resolve()
         os.environ["ACESTEP_PROJECT_ROOT"] = str(resolved_project_root)
+        if self._settings.model_downloads_enabled:
+            download_acestep_checkpoints(self._settings, resolved_project_root)
 
         cache_directory = self._settings.model_cache_directory.expanduser().resolve()
         cache_directory.mkdir(parents=True, exist_ok=True)

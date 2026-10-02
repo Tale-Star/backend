@@ -12,6 +12,11 @@ from time import perf_counter
 from typing import Any
 
 from app.generative_media.application.generation_ports import GeneratedMedia
+from app.generative_media.infrastructure.model_assets import resolve_lora_asset
+from app.generative_media.infrastructure.prompt_translation import (
+    PromptTranslator,
+    translate_prompt,
+)
 from app.generative_media.infrastructure.style_profiles import (
     StyleProfileConfiguration,
     StyleProfileRegistry,
@@ -39,6 +44,7 @@ class ZImageAdapter:
         self._torch: Any | None = None
         self._device: str | None = None
         self._loaded_lora_path: Path | None = None
+        self._prompt_translator = PromptTranslator(settings)
 
     def load(self) -> None:
         if self._pipeline is not None:
@@ -67,7 +73,10 @@ class ZImageAdapter:
             local_files_only=not self._settings.model_downloads_enabled,
         )
         if device == "cuda" and self._settings.zimage_cpu_offload:
-            pipeline.enable_model_cpu_offload()
+            if self._settings.zimage_sequential_cpu_offload:
+                pipeline.enable_sequential_cpu_offload()
+            else:
+                pipeline.enable_model_cpu_offload()
         else:
             pipeline.to(device)
         self._pipeline = pipeline
@@ -96,9 +105,9 @@ class ZImageAdapter:
         if self._settings.zimage_width % 16 or self._settings.zimage_height % 16:
             raise ValueError("ZIMAGE_WIDTH y ZIMAGE_HEIGHT deben ser múltiplos de 16.")
 
-        profile = self._style_profiles.resolve(_text(payload.get("Style")))
+        profile = self._resolve_profile(payload)
         self._apply_style_profile(profile)
-        prompt = build_zimage_prompt(payload, profile)
+        prompt = translate_prompt(self._prompt_translator, build_zimage_prompt(payload, profile))
         effective_seed = seed if seed is not None else secrets.randbelow(4_294_967_296)
         generator = self._torch.Generator(device=self._device).manual_seed(effective_seed)
         cuda = getattr(self._torch, "cuda", None)
@@ -148,21 +157,50 @@ class ZImageAdapter:
     def _apply_style_profile(self, profile: StyleProfileConfiguration) -> None:
         if self._pipeline is None:
             raise RuntimeError("El pipeline Z-Image no está inicializado.")
-        if profile.lora_path is None:
+        lora_path = profile.lora_path
+        if profile.lora_asset_id:
+            lora_path = resolve_lora_asset(self._settings, profile.lora_asset_id)
+        if lora_path is None:
             if self._loaded_lora_path is not None:
                 self._pipeline.unload_lora_weights()
                 self._loaded_lora_path = None
             return
-        if not profile.lora_path.is_file():
-            raise FileNotFoundError(f"No existe el adapter configurado: {profile.lora_path}")
-        if profile.lora_path != self._loaded_lora_path:
+        if not lora_path.is_file():
+            raise FileNotFoundError(f"No existe el adapter configurado: {lora_path}")
+        if lora_path != self._loaded_lora_path:
             if self._loaded_lora_path is not None:
                 self._pipeline.unload_lora_weights()
-            self._pipeline.load_lora_weights(
-                str(profile.lora_path), adapter_name=self._lora_adapter_name
-            )
-            self._loaded_lora_path = profile.lora_path
+            self._pipeline.load_lora_weights(str(lora_path), adapter_name=self._lora_adapter_name)
+            self._loaded_lora_path = lora_path
         self._pipeline.set_adapters(self._lora_adapter_name, adapter_weights=profile.lora_scale)
+
+    def _resolve_profile(self, payload: dict[str, Any]) -> StyleProfileConfiguration:
+        name = _text(payload.get("Style"))
+        configured = self._style_profiles.resolve(name)
+        details = payload.get("StyleProfileDetails")
+        if not isinstance(details, dict):
+            return configured
+        modifier = details.get("prompt_modifier")
+        visual_settings = details.get("visual_settings")
+        if not isinstance(visual_settings, dict):
+            visual_settings = {}
+        asset_id = visual_settings.get("zimage_lora_asset", configured.lora_asset_id)
+        if asset_id is not None and not isinstance(asset_id, str):
+            raise ValueError("visual_settings.zimage_lora_asset debe ser un identificador de LoRA.")
+        scale = visual_settings.get("zimage_lora_scale", configured.lora_scale)
+        if not isinstance(scale, int | float) or not 0 <= float(scale) <= 2:
+            raise ValueError("visual_settings.zimage_lora_scale debe estar entre 0 y 2.")
+        prompt = (
+            modifier
+            if isinstance(modifier, str) and modifier.strip()
+            else configured.prompt_instruction
+        )
+        return StyleProfileConfiguration(
+            prompt_instruction=prompt,
+            lora_path=configured.lora_path,
+            lora_scale=float(scale),
+            lora_asset_id=asset_id,
+        )
 
     def _resolve_device(self, torch: Any) -> str:
         if self._settings.zimage_device == "auto":
@@ -189,7 +227,14 @@ def build_zimage_prompt(
     """Convierte el contrato público de imagen en prompt ordenado y reproducible."""
     selected_profile = profile or StyleProfileConfiguration(prompt_instruction="")
     parts = [
-        _label("Characters", payload.get("Characters")),
+        (
+            _label(
+                "Character appearance",
+                _character_descriptions(payload["CharacterDescriptions"]),
+            )
+            if "CharacterDescriptions" in payload
+            else _label("Characters", payload.get("Characters"))
+        ),
         _label("Action", payload.get("Action")),
         _label("Emotion", payload.get("Emotion")),
         _label("Scene", payload.get("Scene")),
@@ -201,6 +246,18 @@ def build_zimage_prompt(
     ]
     prompt = ". ".join(part for part in parts if part)
     return prompt or "A colorful storybook illustration."
+
+
+def _character_descriptions(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [
+        item["description"].strip()
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(item.get("description"), str)
+        and item["description"].strip()
+    ]
 
 
 def _label(label: str, value: Any) -> str:

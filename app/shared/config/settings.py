@@ -39,16 +39,20 @@ class Settings(BaseSettings):
     image_generator: Literal["fake", "zimage"] = "fake"
     music_generator: Literal["fake", "acestep"] = "fake"
     model_cache_directory: Path = Path("./data/model-cache")
-    model_downloads_enabled: bool = False
+    model_downloads_enabled: bool = True
+    prompt_translation_model: str = "Helsinki-NLP/opus-mt-es-en"
 
     zimage_model_path: str = "Tongyi-MAI/Z-Image-Turbo"
+    zimage_model_variant: Literal["z-image-turbo"] = "z-image-turbo"
     zimage_device: Literal["auto", "cuda", "cpu"] = "auto"
-    zimage_dtype: Literal["auto", "bfloat16", "float16", "float32"] = "auto"
+    zimage_dtype: Literal["auto", "bfloat16", "float16", "float32"] = "bfloat16"
     zimage_cpu_offload: bool = True
+    zimage_sequential_cpu_offload: bool = True
     zimage_width: int = Field(default=512, ge=256, le=1536, multiple_of=16)
     zimage_height: int = Field(default=512, ge=256, le=1536, multiple_of=16)
     zimage_inference_steps: int = Field(default=8, ge=1, le=50)
     zimage_style_profiles_file: Path | None = None
+    zimage_lora_directory: Path = Path("./data/model-cache/loras")
 
     acestep_project_root: Path | None = None
     acestep_model_config: str = "acestep-v15-turbo"
